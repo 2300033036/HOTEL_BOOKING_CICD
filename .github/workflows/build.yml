@@ -1,0 +1,52 @@
+name: CI - Build & Test
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: K@vyaDasetty046
+          MYSQL_DATABASE: hotel_management_cicd
+        # Map to 3307 on the host so you can access locally if needed
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -u root -pK@vyaDasetty046"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend
+        run: docker build -t myuser/frontend:ci ./frontend
+
+      - name: Build backend
+        run: docker build -t myuser/backend:ci ./backend
+
+      - name: Wait for DB to be ready
+        run: |
+          echo "Waiting for DB to be ready..."
+          for i in {1..30}; do
+            docker exec ${{ job.services.db.id }} mysqladmin ping -uroot -pK@vyaDasetty046 && break
+            sleep 2
+          done
+
+      - name: Run backend tests
+        run: docker run --rm -e DB_HOST=db -e DB_PORT=3307 -e DB_NAME=hotel_management_cicd -e DB_USER=root -e DB_PASS=K@vyaDasetty046 myuser/backend:ci ./mvnw test
+
+
+      - name: Run frontend tests
+        run: docker run --rm myuser/frontend:ci npm test
